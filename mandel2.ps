@@ -1,0 +1,255 @@
+%!
+%/interrupt { stop } def
+%/xc -0.749781 def /yc 0.0266004 def /side 0.000533455 def
+%breakhere
+%/args { dup 1 add copy -1 1 { -1 roll = } for pop } def
+%/oldsethsbcolor /sethsbcolor load def
+%/sethsbcolor { 3 args ()= oldsethsbcolor } def
+
+/flushpage where{pop}{/flushpage{}def}ifelse
+/rshow { dup stringwidth exch neg exch rmoveto show } def
+
+%/commands %<<
+    /help {
+        (x:eXplore r:Render i:zoom-In  o:zoom-Out  hjkl:left-down-up-right)=
+        (a-z:increase-decrease resolution and iterations)=
+        (/colorpixel /hsbwheel load def)=
+        (            /evenodd /tenrip /skippy)=
+    } def
+    /a { /M M 1.5 mul def /N N 1.5 mul def /maxit maxit 2 mul def } def
+    /z { /M M .75 mul cvi def /N N .75 mul cvi def /maxit maxit 2 idiv def } def
+    /x { /M 50 def /N 50 def /maxit 200 def } def
+    /r { /M 400 def /N 400 def /maxit 2000 def } def
+    /i { /side side mag div def /maxit maxit 1.2 mul def } def
+    /o { /side side mag mul def /maxit maxit .8 mul cvi def } def
+    /h { /xc xc side step div sub def } def
+    /j { /yc yc side step div sub def } def
+    /k { /yc yc side step div add def } def
+    /l { /xc xc side step div add def } def
+%>> def
+%commands begin
+
+%calculation parameters
+/xc
+0.001643721971153
+%-.251
+def %real center
+/yc
+0.822467633298876
+%.025
+def %imaginary center
+/side
+3.5
+%.01
+def %length of each side
+/M 50 def %rows
+/N 50 def %cols
+/maxit 200 def
+
+%drawing parameters
+currentlinewidth M 2 mul div setlinewidth 
+/fudge 1.09 def
+/ht 500 def
+/w 500 def
+/resetx { /xloc 50 def } def resetx
+/resety { /y 150 def } def resety
+/preview true def
+
+%interaction parameters
+/mag 3 def %magnification factor
+/step 3 def %fraction of view to move by
+
+/menu {
+    %{
+    { %loop until blank line
+
+        (Current Config)=
+        {/xc/yc/side/M/N/maxit} {
+            dup =string cvs (/) print print ( ) print
+            load =string cvs print ( def) =
+        } forall
+        help
+        flush
+
+        mark
+        {
+            %pstack
+            %count =string cvs print
+            (> )print flush
+            (%lineedit)(r)file dup bytesavailable
+            %dup = flush
+            dup 0 eq {pop stop}if %blank line: bust an exit
+            1 add string readline pop
+            %0 1 index length 1 sub getinterval % chop
+            %commands 1 index known { commands exch get } if
+            cvx exec
+        } stopped {exit}if
+        cleartomark 
+
+    } loop
+    %} stopped { quit } if
+} def
+
+/hsbwheel { q sub Q div  .8  1 index 1 exch sub   sethsbcolor } def 
+/evenodd { cvi 2 mod setgray } def 
+/tenrip { cvi 11 mod 10 div setgray } def
+/skippy { dup cvi 11 mod 10 div exch  .9 exch  q sub Q div 1 exch sub  sethsbcolor } def
+
+/colorpixel /hsbwheel load def
+
+/checkcardioid {
+    /q ac .25 sub dup mul
+        bc dup mul add def
+    ac .25 sub q add q mul
+    bc dup mul .25 mul
+    lt %{ /cnt maxit def exit } if
+} bind def
+
+/checkbulb {
+    ac 1 add dup mul
+    bc dup mul add
+    .0625 lt %{ /cnt maxit def exit } if
+} bind def
+
+/createtable {
+/M M abs def % just in case the explorer flubbed it
+/N N abs def %
+/maxit maxit abs ceiling def %
+M 0 eq { /M 50 def } if
+N 0 eq { /N 50 def } if
+maxit 0 eq { /maxit 200 def } if
+/acorner xc side .5 mul sub def %least real % lower-left x value
+/bcorner yc side .5 mul sub def %least imaginary % lower-left y value
+/gap side N div def
+/Q maxit def
+/dh ht M div def
+/dw w N div def
+/fdh dh fudge mul def
+/fdw dw fudge mul def
+resetx
+resety
+
+/Courier 9 selectfont
+% LL coords
+xloc 5 sub y moveto bcorner =string cvs rshow
+xloc y 12 sub moveto acorner =string cvs show
+
+% LR
+xloc w add 5 add y moveto bcorner =string cvs show
+xloc w add y 12 sub moveto acorner side add =string cvs rshow
+
+% UL
+xloc 5 sub y ht add 12 sub moveto bcorner side add =string cvs rshow
+xloc y ht add 3 add moveto acorner =string cvs show
+
+% UR
+xloc w add y ht add 3 add moveto acorner side add =string cvs rshow
+xloc w add 5 add y ht add 12 sub moveto bcorner side add =string cvs show
+
+/Courier-Bold [ dw maxit log ceiling div 2 mul 0 0 dh 1.2 mul 0 0] selectfont
+
+/tab [
+    0 1 M 1 sub { /m exch def
+        %(m =)print m =
+        [
+            0 1 N 1 sub { /n exch def
+                %(n=)print n =
+                /ac n gap mul acorner add def
+                /bc m gap mul bcorner add def
+                /az 0 def
+                /bz 0 def
+                /cnt 0 def
+
+                checkcardioid
+                checkbulb or {
+                    /cnt maxit def
+                }{
+                    %(cnt=)print cnt =
+                    /q 0 def
+
+                    { % loop
+
+                        az dup mul      % z = z^2 + c
+                        bz dup mul sub  %  = (az + bzi)^2 + ac + bci
+                        ac add          %  = az^2 - bz^2 + ac + (2*az*bz + bc)i
+                        2 az bz mul mul
+                        bc add
+                        /bz exch def
+                        /az exch def
+
+                        /size az dup mul bz dup mul add sqrt def
+
+                        size 2 ge { exit } if
+                        cnt maxit ge { exit } if
+                        /cnt cnt 1 add def
+                    } loop
+
+                } ifelse
+
+                cnt
+                %dup =
+                preview {
+                    dup colorpixel
+                    dup maxit ge {
+                        xloc y fdw dh rectfill
+                    }{
+                        xloc y dw fdh rectstroke
+                        xloc y moveto
+                        dup =string cvs show
+                    } ifelse
+                    /xloc xloc dw add def
+                } if
+            } for
+        ]
+        preview {
+            resetx
+            /y y dh add def
+        } if
+    } for
+] def
+} bind def
+
+/findmaxmin {
+/q 2 def /Q 0 def
+tab {
+    {
+        dup maxit lt {
+            dup q lt { dup /q exch def } if
+            dup Q gt { dup /Q exch def } if
+        } if
+        pop
+    } forall
+} forall
+} bind def
+
+/sketch {
+resetx
+resety
+tab {
+    {
+        dup maxit ge { pop 0 setgray }{
+            colorpixel
+        } ifelse
+        xloc y fdw fdh rectfill
+        /xloc xloc dw add def
+    } forall
+    resetx
+    /y y dh add def
+} forall
+} def
+
+% The Main Loop
+% - draw the object according to currrent parameters
+% - enter menu loop
+% - showpage
+{
+    %{
+        createtable findmaxmin sketch flushpage
+    %} stopped
+    %{ pstack handleerror } if
+    clear
+    menu
+    showpage
+} loop
+
+%eof
